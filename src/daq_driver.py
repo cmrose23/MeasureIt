@@ -31,8 +31,12 @@ class Daq(Instrument):
         self.cfg_fp = os.getenv('MeasureItHome') + '\\cfg\\daq_output.cfg'
         self.cfg_obj = ConfigParser()
         self.cfg_obj.read(self.cfg_fp)
-        self.cfg_output = self.cfg_obj['OUTPUT']
-
+        if 'OUTPUT' in self.cfg_obj.keys():
+            self.cfg_output = self.cfg_obj['OUTPUT']
+        else:
+            self.cfg_obj['OUTPUT'] = {}
+            self.cfg_output = self.cfg_obj['OUTPUT']
+            
         # For each output channel, create a corresponding DaqAOChannel object
         for a in range(self.ao_num):
             ch_name = 'ao' + str(a)
