@@ -13,8 +13,8 @@ class Daq(Instrument):
 
     def __init__(self, name="Daq", address=""):
         """
-        Initialization for the DAQ driver. Takes in the machine given device address (typically "Dev1"), a user-defined
-        name, and the number of ao and ai ports. Creates QCoDeS Parameters for each of the io channels.
+        Initialization for the DAQ driver. Takes in the machine given device address (typically "Dev1"), and a user-defined
+        name. Creates QCoDeS Parameters for each of the io channels.
         """
 
         start_time = time.time()
@@ -38,32 +38,40 @@ class Daq(Instrument):
             self.cfg_output = self.cfg_obj['OUTPUT']
             
         # For each output channel, create a corresponding DaqAOChannel object
-        for a in range(self.ao_num):
-            ch_name = 'ao' + str(a)
-            if ch_name not in self.cfg_output.keys():
-                self.cfg_output[ch_name] = '0'
-            channel = DaqAOChannel(self, self.device, self._address, ch_name)
-            self.add_submodule(ch_name, channel)
-            # We now automatically create a task to write on each channel (NECESSARY!)
-            task = nidaqmx.Task(f"writing {self._address}_{ch_name}")
-            channel.add_self_to_task(task)
-        # Similarly, create a DaqAIChannel object for each (real) input channel
-        for b in range(self.ai_num):
-            # NI DAQs can use each of the coax pins as analog inputs separately, and
-            # numbers them as such. (AI0-7 is voltage-part of coax reading for first 
-            # 8 pins, 8-15 is ground reading of coax for first 8 pins).
-            # We don't want this behavior, we use each port as one input (ground and 
-            # voltage), so we make sure to only grab the "real" analog inputs
-            count = 0
-            if int(b / 8) % 2 == 0:
-                ch_name = 'ai' + str(b)
-                channel = DaqAIChannel(self, self.device, self._address, ch_name)
+        # If the device is already in use, system will throw a 'DaqError'. If so,
+        # let's catch it and close the device, removing the instance from qcodes,
+        # then throw the error.
+        try:
+            for a in range(self.ao_num):
+                ch_name = 'ao' + str(a)
+                if ch_name not in self.cfg_output.keys():
+                    self.cfg_output[ch_name] = '0'
+                channel = DaqAOChannel(self, self.device, self._address, ch_name)
                 self.add_submodule(ch_name, channel)
-                task = nidaqmx.Task(f"reading {self._address}_{ch_name}")
-                channel.add_self_to_task(task)
-                count += 1
-            # Update the actual number of ai ports
-            self.ai_num = count
+                # We now automatically create a task to write on each channel (NECESSARY!)
+                write_task = nidaqmx.Task(f"writing {self._address}_{ch_name}")
+                read_task = nidaqmx.Task(f"reading {self._address}_{ch_name}")
+                channel.add_self_to_task(write_task, read_task)
+            # Similarly, create a DaqAIChannel object for each (real) input channel
+            for b in range(self.ai_num):
+                # NI DAQs can use each of the coax pins as analog inputs separately, and
+                # numbers them as such. (AI0-7 is voltage-part of coax reading for first
+                # 8 pins, 8-15 is ground reading of coax for first 8 pins).
+                # We don't want this behavior, we use each port as one input (ground and
+                # voltage), so we make sure to only grab the "real" analog inputs
+                count = 0
+                if int(b / 8) % 2 == 0:
+                    ch_name = 'ai' + str(b)
+                    channel = DaqAIChannel(self, self.device, self._address, ch_name)
+                    self.add_submodule(ch_name, channel)
+                    task = nidaqmx.Task(f"reading {self._address}_{ch_name}")
+                    channel.add_self_to_task(task)
+                    count += 1
+                # Update the actual number of ai ports
+                self.ai_num = count
+        except nidaqmx.errors.DaqError as e:
+            self.close()
+            raise e
 
         print(f"Connected to: NI DAQ {self.device.product_type} ({self._address}) in {(time.time()-start_time):.2f}s")
         self.log.info(f"Connected to instrument: {self._address}")
@@ -116,11 +124,13 @@ class Daq(Instrument):
         return snap
 
     def close(self):
-        with open(self.cfg_fp, 'w') as conf:
-            self.cfg_obj.write(conf)
+        if hasattr(self, 'submodules'):
+            for a, c in self.submodules.items():
+                c.close()
 
-        for a, c in self.submodules.items():
-            c.clear_task()
+        if hasattr(self, 'cfg_fp'):
+            with open(self.cfg_fp, 'w') as conf:
+                self.cfg_obj.write(conf)
 
         super().close()
 
@@ -182,16 +192,17 @@ class DaqAOChannel(InstrumentChannel):
         """
         Returns the current output voltage.
         """
-        self._voltage = float(self.parent.cfg_output[self.my_name])
+        if self.read_task is not None:
+            self._voltage = self.read_task.read()
+
         return self._voltage
 
     def set_voltage(self, _voltage):
         """
         Sets the voltage to the value passed as '_voltage'
         """
-        if self.task is not None:
-            self.task.write(_voltage)
-            self.parent.cfg_output[self.my_name] = str(_voltage)
+        if self.write_task is not None:
+            self.write_task.write(_voltage)
 
             self._voltage = _voltage
 
@@ -249,7 +260,8 @@ class DaqAOChannel(InstrumentChannel):
         self.impedance = None
         self._value = 0
 
-        self.task = None
+        self.write_task = None
+        self.read_task = None
         self.channel = None
 
         # Add a Parameter for the output gain, set the unit to 'V/V' as default
@@ -292,22 +304,24 @@ class DaqAOChannel(InstrumentChannel):
                            vals=vals.Numbers(-10, 10)
                            )
 
-    def add_self_to_task(self, task):
+    def add_self_to_task(self, write_task, read_task):
         """
         Utility function to define the task that should be used to conduct writes
         to the port.
         Arguments:
             task - task to be used for writing
         """
-        if self.task is not None:
+        if self.write_task is not None or self.read_task is not None:
             self.clear_task()
 
         # Add the channel to the task
-        task.ao_channels.add_ao_voltage_chan(self.fullname)
-        self.task = task
+        write_task.ao_channels.add_ao_voltage_chan(self.fullname)
+        self.write_task = write_task
+        read_task.ai_channels.add_ai_voltage_chan(f"{self.address}/_{self.my_name}_vs_aognd")
+        self.read_task = read_task
         # Channel handler that can be used to communicate things like gain, impedance
         # back to the DAQ
-        self.channel_handle = nidaqmx._task_modules.channels.ao_channel.AOChannel(self.task._handle, self.channel)
+        self.channel_handle = nidaqmx._task_modules.channels.ao_channel.AOChannel(self.write_task._handle, self.channel)
 
     #        if self.gain != -1:
     #            task.ao_channels.ao_gain=self.gain
@@ -318,15 +332,19 @@ class DaqAOChannel(InstrumentChannel):
         """
         Utility function to clean the task object for resource maintenance reasons
         """
-        if self.task is not None:
-            self.task.close()
-        self.task = None
+        if self.read_task is not None:
+            self.read_task.close()
+        if self.write_task is not None:
+            self.write_task.close()
+        self.read_task = None
+        self.write_task = None
         self.channel_handle = None
 
-    def __del__(self):
+    def close(self):
         """
         Destructor, makes sure task is clean.
         """
+        self.parent.cfg_output[self.my_name] = str(self._voltage)
         self.clear_task()
 
 
@@ -366,7 +384,7 @@ class DaqAIChannel(InstrumentChannel):
         """
         Returns the current input voltage.
         """
-        if self.task != None:
+        if self.task is not None:
             self._voltage = self.task.read()
         return self._voltage
 
@@ -487,7 +505,7 @@ class DaqAIChannel(InstrumentChannel):
         self.task = None
         self.channel_handle = None
 
-    def __del__(self):
+    def close(self):
         """
         Destructor, makes sure task is clean.
         """

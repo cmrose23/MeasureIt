@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>addDevice</class>
- <widget class="QDialog" name="addDevice">
+ <class>addInstrument</class>
+ <widget class="QDialog" name="addInstrument">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -81,7 +81,7 @@
     <item>
      <layout class="QVBoxLayout" name="verticalLayout_2">
       <item>
-       <widget class="QComboBox" name="deviceBox"/>
+       <widget class="QComboBox" name="instrumentBox"/>
       </item>
       <item>
        <widget class="QLineEdit" name="nameEdit"/>
@@ -105,7 +105,7 @@
   <connection>
    <sender>dialogBox</sender>
    <signal>accepted()</signal>
-   <receiver>addDevice</receiver>
+   <receiver>addInstrument</receiver>
    <slot>accept()</slot>
    <hints>
     <hint type="sourcelabel">
@@ -121,7 +121,7 @@
   <connection>
    <sender>dialogBox</sender>
    <signal>rejected()</signal>
-   <receiver>addDevice</receiver>
+   <receiver>addInstrument</receiver>
    <slot>reject()</slot>
    <hints>
     <hint type="sourcelabel">

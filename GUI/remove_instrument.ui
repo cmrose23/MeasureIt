@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>removeDevice</class>
- <widget class="QDialog" name="removeDevice">
+ <class>removeInstrument</class>
+ <widget class="QDialog" name="removeInstrument">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -29,23 +29,23 @@
     <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
    </property>
   </widget>
-  <widget class="QLabel" name="deviceLabel">
+  <widget class="QLabel" name="instrumentLabel">
    <property name="geometry">
     <rect>
      <x>20</x>
      <y>30</y>
-     <width>47</width>
-     <height>13</height>
+     <width>61</width>
+     <height>16</height>
     </rect>
    </property>
    <property name="text">
-    <string>Device:</string>
+    <string>Instrument:</string>
    </property>
   </widget>
-  <widget class="QComboBox" name="deviceBox">
+  <widget class="QComboBox" name="instrumentBox">
    <property name="geometry">
     <rect>
-     <x>70</x>
+     <x>80</x>
      <y>30</y>
      <width>111</width>
      <height>22</height>
@@ -58,7 +58,7 @@
   <connection>
    <sender>buttonBox</sender>
    <signal>accepted()</signal>
-   <receiver>removeDevice</receiver>
+   <receiver>removeInstrument</receiver>
    <slot>accept()</slot>
    <hints>
     <hint type="sourcelabel">
@@ -74,7 +74,7 @@
   <connection>
    <sender>buttonBox</sender>
    <signal>rejected()</signal>
-   <receiver>removeDevice</receiver>
+   <receiver>removeInstrument</receiver>
    <slot>reject()</slot>
    <hints>
     <hint type="sourcelabel">
