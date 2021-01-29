@@ -343,6 +343,7 @@ class BaseSweep(QObject):
         Arguments:
             func - function to call
         """
+        self.complete_func = func
         self.completed.connect(func)
 
     @pyqtSlot()
