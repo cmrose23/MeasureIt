@@ -506,8 +506,6 @@ class Model_340(LakeshoreBase):
 
         self.output_1 = Output_340(self, 'output_1', 1)
         self.output_2 = Output_340(self, 'output_2', 2)
-        for key, value in self.channel_name_command.items():
-            self.add_submodule(f'channel_{key}', self.CHANNEL_CLASS(self, key, value))
         self.add_submodule('output_1', self.output_1)
         self.add_submodule('output_2', self.output_2)
 
