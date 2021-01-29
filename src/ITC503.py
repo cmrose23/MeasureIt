@@ -42,7 +42,7 @@ class ITC503(VisaInstrument):
         self.add_parameter('control',
                            label='Control',
                            docstring='Specifies local or remote control, locked or unlocked.',
-                           vals=vals.Ints(0, 3),
+                           vals=vals.Numbers(0, 3),
                            set_cmd=self._set_control_status,
                            get_cmd=self._get_control_status)
 
@@ -119,19 +119,19 @@ class ITC503(VisaInstrument):
                            docstring='Specifies the sensor to be used for automatic PID control.',
                            set_cmd=self._set_heater_sensor,
                            get_cmd=self._get_heater_sensor,
-                           vals=vals.Ints(1, 3))
+                           vals=vals.Numbers(1, 3))
 
         self.add_parameter('output_mode',
                            label='Output mode',
                            set_cmd=self._set_output_mode,
                            get_cmd=self._get_output_mode,
-                           vals=vals.Ints(0, 3))
+                           vals=vals.Numbers(0, 3))
 
         self.add_parameter('sweep',
                            label='Sweep',
                            set_cmd=self._set_sweep,
                            get_cmd=self._get_sweep_status,
-                           vals=vals.Ints(0, 1))
+                           vals=vals.Numbers(0, 1))
 
         self.connect_message(idn_param='identity', begin_time=connect_time)
         print(f"Connected to: Oxford Instruments ITC-503 in {(time.time()-connect_time):.2f} seconds.")
@@ -187,7 +187,7 @@ class ITC503(VisaInstrument):
         return self._execute(f'D{D}')
 
     def _set_output_mode(self, n):
-        return self._execute(f'A{n}')
+        return self._execute(f'A{int(n)}')
 
     def _get_output_mode(self):
         result = self._execute(f'X')
@@ -197,14 +197,14 @@ class ITC503(VisaInstrument):
         return self._execute(f'O{n:.1f}')
 
     def _set_control_status(self, n):
-        return self._execute(f'C{n}')
+        return self._execute(f'C{int(n)}')
 
     def _get_control_status(self):
         result = self._execute(f'X')
         return self._GET_STATUS_MODE[int(result[3])]
 
     def _set_heater_sensor(self, n):
-        return self._execute(f'H{n}')
+        return self._execute(f'H{int(n)}')
 
     def _get_heater_sensor(self):
         result = self._execute(f'X')
@@ -221,9 +221,9 @@ class ITC503(VisaInstrument):
         if n == 0:
             return 'Sweep not running'
         elif n % 2 == 1:
-            return f'Sweeping to step {(n+1)/2}'
+            return f'Sweeping to step {(int(n)+1)/2}'
         else:
-            return f'Holding at step {n/2}'
+            return f'Holding at step {int(n)/2}'
 
 
 
