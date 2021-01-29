@@ -273,7 +273,7 @@ class Sweep1D(BaseSweep):
         self.ramp_sweep = Sweep1D(self.set_param, curr_value, value, multiplier * self.step,
                                   inter_delay=self.inter_delay,
                                   complete_func=partial(self.done_ramping, value, start_on_finish, persist),
-                                  save_data=False, plot_data=True)
+                                  save_data=False, plot_data=self.plot_data)
 
         self.is_running = False
         self.is_ramping = True
