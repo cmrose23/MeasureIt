@@ -49,6 +49,7 @@ class BaseSweep(QObject):
         self.is_running = False
         self.t0 = 0
 
+        self.persist_data = None
         self.datasaver = datasaver
 
         QObject.__init__(self)
