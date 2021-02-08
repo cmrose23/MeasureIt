@@ -52,6 +52,14 @@ class Model_340_Channel(InstrumentChannel):
                            label='Temperature',
                            unit='K')
 
+        self.add_parameter('mode',
+                           label='Remote/local control',
+                           get_cmd='MODE?',
+                           set_cmd='MODE {{mode}}',
+                           val_mapping={'local': 1,
+                                        'remote': 2,
+                                        'remote and locked': 3})
+
         self.add_parameter('sensor_raw',
                            get_cmd=f'SRDG? {self._channel}',
                            get_parser=float,
@@ -63,36 +71,85 @@ class Model_340_Channel(InstrumentChannel):
                            get_parser=self._decode_sensor_status,
                            label='Sensor status')
 
+        self.add_parameter('input_curve',
+                           label='Input curve',
+                           get_cmd=f'INCRV? {self._channel}',
+                           set_cmd=f'INCRV {self._channel}, {{input_curve}}',
+                           vals=vals.Ints(0, 60))
+
         # Parameters related to Input Type Parameter Command (INTYPE)
         self.add_parameter('sensor_type',
                            label='Input sensor type',
                            docstring='Specifies input sensor type',
-                           val_mapping={'Si diode': 0,
-                                        'GaAlAs diode': 1,
-                                        '100 ohm Pt/250': 2,
-                                        '100 ohm Pt/500': 3,
-                                        '1000 ohm Pt': 4,
-                                        'ntc_rtd': 5,
-                                        'thermocouple 25mV': 6,
-                                        'thermocouple 50mV': 7,
-                                        '2.5 V, 1 mA': 8,
-                                        '7.5 V, 1 mA': 9},
+                           val_mapping={'Special': 0,
+                                        'Si diode': 1,
+                                        'GaAlAs diode': 2,
+                                        '100 ohm Pt/250': 3,
+                                        '100 ohm Pt/500': 4,
+                                        '1000 ohm Pt': 5,
+                                        'Rhodium Iron': 6,
+                                        'Carbon-glass': 7,
+                                        'Cernox': 8,
+                                        'RuOx': 9,
+                                        'Germanium': 10,
+                                        'Capacitor': 11,
+                                        'Thermocouple': 12},
                            parameter_class=GroupParameter)
 
-        self.add_parameter('compensation_enabled',
-                           label='Compensation enabled',
-                           docstring='Specifies input compensation. Reversal '
-                                     'for thermal EMF compensation if input '
-                                     'is resistive, room compensation if '
-                                     'input is thermocouple. Always 0 if input '
-                                     'is a diode',
-                           val_mapping={False: 0, True: 1},
+        self.add_parameter('sensor_units',
+                           label='Input sensor units',
+                           val_mapping={'Special': 0,
+                                        'volts': 1,
+                                        'ohms': 2},
                            parameter_class=GroupParameter)
 
-        self.output_group = Group([self.sensor_type, self.compensation_enabled],
+        self.add_parameter('sensor_coefficient',
+                           label='Input coefficient',
+                           val_mapping={'Special': 0,
+                                        'negative': 1,
+                                        'positive': 2},
+                           parameter_class=GroupParameter)
+
+        self.add_parameter('sensor_excitation',
+                           label='Input sensor excitation',
+                           val_mapping={'Off': 0,
+                                        '30 nA': 1,
+                                        '100 nA': 2,
+                                        '300 nA': 3,
+                                        '1 uA': 4,
+                                        '3 uA': 5,
+                                        '10 uA': 6,
+                                        '30 uA': 7,
+                                        '100 uA': 8,
+                                        '300 uA': 9,
+                                        '1 mA': 10,
+                                        '10 mV': 11,
+                                        '1 mV': 12},
+                           parameter_class=GroupParameter)
+
+        self.add_parameter('sensor_range',
+                           label='Input sensor range',
+                           val_mapping={'Special': 0,
+                                        '1 mV': 1,
+                                        '2.5 mV': 2,
+                                        '5 mV': 3,
+                                        '10 mV': 4,
+                                        '25 mV': 5,
+                                        '50 mV': 6,
+                                        '100 mV': 7,
+                                        '250 mV': 8,
+                                        '500 mV': 9,
+                                        '1 V': 10,
+                                        '2.5 V': 11,
+                                        '5 V': 12,
+                                        '7.5 V': 13},
+                           parameter_class=GroupParameter)
+
+        self.output_group = Group([self.sensor_type, self.sensor_units, self.sensor_coefficient, self.sensor_excitation,
+                                   self.sensor_range],
                                   set_cmd=f'INTYPE {self._channel}, '
-                                          f'{{sensor_type}}, '
-                                          f'{{compensation_enabled}}, ',
+                                          f'{{sensor_type}}, {{sensor_units}}, {{sensor_coefficient}}, '
+                                          f'{{sensor_excitation}}, {{sensor_range}}',
                                   get_cmd=f'INTYPE? {self._channel}')
 
     def _decode_sensor_status(self, sum_of_codes: str):
