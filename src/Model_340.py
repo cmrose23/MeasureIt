@@ -14,7 +14,6 @@ import numpy as np
 
 from qcodes import VisaInstrument, InstrumentChannel, ChannelList
 from qcodes.instrument.group_parameter import GroupParameter, Group
-from qcodes.utils import validators as vals
 
 
 class Model_340_Channel(InstrumentChannel):
@@ -145,12 +144,30 @@ class Model_340_Channel(InstrumentChannel):
                                         '7.5 V': 13},
                            parameter_class=GroupParameter)
 
-        self.output_group = Group([self.sensor_type, self.sensor_units, self.sensor_coefficient, self.sensor_excitation,
+        self.sensor_group = Group([self.sensor_type, self.sensor_units, self.sensor_coefficient, self.sensor_excitation,
                                    self.sensor_range],
                                   set_cmd=f'INTYPE {self._channel}, '
                                           f'{{sensor_type}}, {{sensor_units}}, {{sensor_coefficient}}, '
                                           f'{{sensor_excitation}}, {{sensor_range}}',
                                   get_cmd=f'INTYPE? {self._channel}')
+
+        self.add_parameter('input_enabled',
+                           label='input enabled',
+                           val_mapping={False: 0,
+                                        True: 1},
+                           vals=vals.Bool(),
+                           parameter_class=GroupParameter)
+
+        self.add_parameter('input_compensation',
+                           label='input compensation',
+                           val_mapping={'off': 0,
+                                        'on': 1,
+                                        'pause': 2},
+                           parameter_class=GroupParameter)
+
+        self.input_group = Group([self.input_enabled, self.input_compensation],
+                                 set_cmd=f'INSET {self._channel}, {{input_enabled}}, {{input_compensation}}',
+                                 get_cmd=f'INSET? {self._channel}')
 
     def _decode_sensor_status(self, sum_of_codes: str):
         """
@@ -215,8 +232,8 @@ class Model_340_Channel(InstrumentChannel):
             terms_left = terms_left[terms_left <= number]
 
         return terms_in_number
-    
-    
+
+
 class Output_340(InstrumentChannel):
     """
     Base class for the outputs of Lakeshore temperature controllers
@@ -241,7 +258,7 @@ class Output_340(InstrumentChannel):
         'AutoTune PID': 4,
         'AutoTune PI': 5,
         'AutoTune P': 6}
-    
+
     RANGES: ClassVar[Dict[str, int]] = {
         'off': 0,
         'low': 1,
@@ -250,7 +267,7 @@ class Output_340(InstrumentChannel):
 
     _input_channel_parameter_kwargs: ClassVar[Dict[str, Any]] = {'A': 1, 'B': 2}
 
-    def __init__(self, parent, output_name, loop, has_pid: bool=True) \
+    def __init__(self, parent, output_name, loop, has_pid: bool = True) \
             -> None:
         super().__init__(parent, output_name)
 
@@ -259,41 +276,41 @@ class Output_340(InstrumentChannel):
 
         self._has_pid = has_pid
         self._loop = loop
-        
+
         self.add_parameter('mode',
                            label='Control mode',
                            docstring='Specifies the control mode',
                            val_mapping=self.MODES,
                            set_cmd=f'CMODE {self._loop} {{}}',
                            get_cmd=f'CMODE ')
-        
+
         self.add_parameter('input_channel',
                            label='Input channel',
                            docstring='Specifies which measurement input to '
                                      'control from (note that only '
                                      'measurement inputs are available)',
                            parameter_class=GroupParameter,
-                           val_mapping=self._input_channel_parameter_kwargs)#,
-                           #**self._input_channel_parameter_kwargs)
-                                     
+                           val_mapping=self._input_channel_parameter_kwargs)  # ,
+        # **self._input_channel_parameter_kwargs)
+
         self.add_parameter('units',
                            label='Setpoint units',
                            val_mapping={'kelvin': 1, 'celsius': 2, 'sensor units': 3},
                            parameter_class=GroupParameter)
-        
+
         self.add_parameter('current_or_power',
                            label='output unit',
                            docstring='Specifies whether output displays in current or power.',
                            val_mapping={'current': 1, 'power': 2},
                            parameter_class=GroupParameter)
-        
+
         self.add_parameter('powerup_enable',
                            label='Power-up enable on/off',
                            docstring='Specifies whether the output remains on '
                                      'or shuts off after power cycle.',
                            val_mapping={True: 1, False: 0},
                            parameter_class=GroupParameter)
-        
+
         self.output_group = Group([self.input_channel, self.units,
                                    self.powerup_enable, self.powerup_enable],
                                   set_cmd=f'CSET {self._loop}, {{input_channel}}, '
@@ -371,7 +388,7 @@ class Output_340(InstrumentChannel):
                            get_cmd=None,
                            vals=vals.Sequence(vals.Numbers(0, 400),
                                               require_sorted=True,
-                                              length=len(self.RANGES)-1),
+                                              length=len(self.RANGES) - 1),
                            label='Temperature limits for output ranges',
                            unit='K',
                            docstring='Use this parameter to define which '
@@ -462,7 +479,7 @@ class Output_340(InstrumentChannel):
         i = min(i, len(range_limits) - 1)
         # there is a `+1` because `self.RANGES` includes `'off'` as the first
         # value.
-        orange = self.INVERSE_RANGES[i+1] # this is `output range` not the fruit
+        orange = self.INVERSE_RANGES[i + 1]  # this is `output range` not the fruit
         self.log.debug(f'setting output range from temperature '
                        f'({temperature} K) to {orange}.')
         self.output_range(orange)
@@ -484,9 +501,9 @@ class Output_340(InstrumentChannel):
         self.setpoint(temperature)
 
     def wait_until_set_point_reached(self,
-                                     wait_cycle_time: float=None,
-                                     wait_tolerance: float=None,
-                                     wait_equilibration_time: float=None):
+                                     wait_cycle_time: float = None,
+                                     wait_tolerance: float = None,
+                                     wait_equilibration_time: float = None):
         """
         This function runs a loop that monitors the value of the heater's
         input channel until the read values is close to the setpoint value
@@ -517,7 +534,7 @@ class Output_340(InstrumentChannel):
         wait_cycle_time = wait_cycle_time or self.wait_cycle_time.get_latest()
         tolerance = wait_tolerance or self.wait_tolerance.get_latest()
         equilibration_time = (wait_equilibration_time or
-                                   self.wait_equilibration_time.get_latest())
+                              self.wait_equilibration_time.get_latest())
 
         active_channel_id = self.input_channel()
         active_channel_name_on_instrument = (self.root_instrument
@@ -545,8 +562,8 @@ class Output_340(InstrumentChannel):
                 time_enter_tolerance_zone = time_now
 
             time.sleep(wait_cycle_time)
-    
-    
+
+
 class Model_340(LakeshoreBase):
     """
     Lakeshore Model 340 Temperature Controller Driver
@@ -565,8 +582,3 @@ class Model_340(LakeshoreBase):
         self.output_2 = Output_340(self, 'output_2', 2)
         self.add_submodule('output_1', self.output_1)
         self.add_submodule('output_2', self.output_2)
-
-
-    
-
-
