@@ -9,17 +9,18 @@ log = logging.getLogger(__name__)
 class ITC503(VisaInstrument):
 
     _GET_STATUS_MODE = {
-        0: 'Local and Locked',
-        1: 'Remote and Locked',
-        2: 'Local and Unlocked',
-        3: 'Remote and Unlocked'
+        0: 'Local',
+        1: 'Remote'
+    }
+
+    _GET_LOCK_MODE = {
+        0: 'Locked',
+        1: 'Unlocked'
     }
 
     _GET_OUTPUT_MODE = {
-        0: 'Heater Manual, Gas Manual',
-        1: 'Heater Auto, Gas Manual',
-        2: 'Heater Manual, Gas Auto',
-        3: 'Heater Auto, Gas Auto'
+        0: 'Manual',
+        1: 'Auto'
     }
 
     _GET_AUTOPID_STATUS = {
@@ -41,10 +42,16 @@ class ITC503(VisaInstrument):
         
         self.add_parameter('control',
                            label='Control',
-                           docstring='Specifies local or remote control, locked or unlocked.',
-                           vals=vals.Numbers(0, 3),
+                           docstring='Specifies local or remote control',
+                           vals=vals.Numbers(0, 1),
                            set_cmd=self._set_control_status,
                            get_cmd=self._get_control_status)
+        
+        self.add_parameter('control_lock',
+                           label='Control lock',
+                           vals=vals.Numbers(0,1),
+                           set_cmd=self._set_control_lock_status,
+                           get_cmd=self._get_control_lock_status)
 
         self.add_parameter('setpoint',
                            label='Temperature setpoint',
@@ -121,11 +128,17 @@ class ITC503(VisaInstrument):
                            get_cmd=self._get_heater_sensor,
                            vals=vals.Numbers(1, 3))
 
-        self.add_parameter('output_mode',
-                           label='Output mode',
+        self.add_parameter('heater_mode',
+                           label='heater mode',
                            set_cmd=self._set_output_mode,
                            get_cmd=self._get_output_mode,
-                           vals=vals.Numbers(0, 3))
+                           vals=vals.Numbers(0, 1))
+
+        self.add_parameter('gas_mode',
+                           label='gas mode',
+                           set_cmd=self._set_gas_mode,
+                           get_cmd=self._get_gas_mode,
+                           vals=vals.Numbers(0, 1))
 
         self.add_parameter('sweep',
                            label='Sweep',
@@ -134,7 +147,6 @@ class ITC503(VisaInstrument):
                            vals=vals.Numbers(0, 1))
 
         self.connect_message(idn_param='identity', begin_time=connect_time)
-        print(f"Connected to: Oxford Instruments ITC-503 in {(time.time()-connect_time):.2f} seconds.")
 
     def _execute(self, message):
         self.log.info('Send the following command to the device: %s' % message)
@@ -187,21 +199,39 @@ class ITC503(VisaInstrument):
         return self._execute(f'D{D}')
 
     def _set_output_mode(self, n):
-        return self._execute(f'A{int(n)}')
+        gas = int(int(self._execute(f'X')[3])/2)
+        return self._execute(f'A{int(n)+gas*2}')
 
     def _get_output_mode(self):
         result = self._execute(f'X')
-        return self._GET_OUTPUT_MODE[int(result[5])]
+        return self._GET_OUTPUT_MODE[int(result[3]) % 2]
+
+    def _set_gas_mode(self, n):
+        output = int(self._execute(f'X')[3]) % 2
+        return self._execute(f'A{output+2*int(n)}')
+
+    def _get_gas_mode(self):
+        result = self._execute(f'X')
+        return self._GET_OUTPUT_MODE[int(int(result[3])/2)]
 
     def _set_manual_output(self, n):
         return self._execute(f'O{n:.1f}')
 
     def _set_control_status(self, n):
-        return self._execute(f'C{int(n)}')
+        control_lock = int(int(self._execute(f'X')[5])/2)
+        return self._execute(f'C{int(n)+2*control_lock}')
 
     def _get_control_status(self):
         result = self._execute(f'X')
-        return self._GET_STATUS_MODE[int(result[3])]
+        return self._GET_STATUS_MODE[int(result[5]) % 2]
+
+    def _set_control_lock_status(self, n):
+        control = int(self._execute(f'X')[5]) % 2
+        return self._execute(f'C{control+2*int(n)}')
+
+    def _get_control_lock_status(self):
+        result = self._execute(f'X')
+        return self._GET_LOCK_MODE[int(int(result[5])/2)]
 
     def _set_heater_sensor(self, n):
         return self._execute(f'H{int(n)}')
