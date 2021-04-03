@@ -4,7 +4,7 @@ from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import QTableWidgetItem, QMessageBox, QFileDialog, \
     QPushButton, QCheckBox, QHeaderView, QLineEdit, QListWidgetItem, QAction
-from PyQt5.QtGui import QTextCursor
+from PyQt5.QtGui import QIcon, QTextCursor
 import sys, os
 from datetime import datetime
 import yaml
@@ -973,8 +973,14 @@ def main():
         qc.config.update_config(os.environ['MeasureItHome'] + '\\cfg\\')
 
     app = QtWidgets.QApplication(sys.argv)
+    app.setWindowIcon(QIcon('qcodes_logo.ico'))
     app.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling)
     app.setStyle('WindowsVista')
+
+    import ctypes
+    myappid = u'uw.nanophys.measureit.gui'  # arbitrary string
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+
 
     window = UImain()
     window.setAttribute(QtCore.Qt.WA_StyledBackground)
