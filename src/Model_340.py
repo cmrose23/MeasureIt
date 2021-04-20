@@ -265,7 +265,7 @@ class Output_340(InstrumentChannel):
         'medium': 2,
         'high': 3}
 
-    _input_channel_parameter_kwargs: ClassVar[Dict[str, Any]] = {'A': 1, 'B': 2}
+    _input_channel_parameter_kwargs: ClassVar[Dict[str, Any]] = {'A': 'A', 'B': 'B'}
 
     def __init__(self, parent, output_name, loop, has_pid: bool = True) \
             -> None:
@@ -282,7 +282,7 @@ class Output_340(InstrumentChannel):
                            docstring='Specifies the control mode',
                            val_mapping=self.MODES,
                            set_cmd=f'CMODE {self._loop} {{}}',
-                           get_cmd=f'CMODE ')
+                           get_cmd=f'CMODE? {self._loop}')
 
         self.add_parameter('input_channel',
                            label='Input channel',
@@ -290,6 +290,7 @@ class Output_340(InstrumentChannel):
                                      'control from (note that only '
                                      'measurement inputs are available)',
                            parameter_class=GroupParameter,
+                           get_parser=lambda x: x[0],
                            val_mapping=self._input_channel_parameter_kwargs)  # ,
         # **self._input_channel_parameter_kwargs)
 
@@ -298,16 +299,24 @@ class Output_340(InstrumentChannel):
                            val_mapping={'kelvin': 1, 'celsius': 2, 'sensor units': 3},
                            parameter_class=GroupParameter)
 
-        self.add_parameter('current_or_power',
-                           label='output unit',
-                           docstring='Specifies whether output displays in current or power.',
-                           val_mapping={'current': 1, 'power': 2},
+        # This parameter is for control loop display - 'CDISP' command, which isn't implemented
+#        self.add_parameter('current_or_power',
+#                           label='output unit',
+#                           docstring='Specifies whether output displays in current or power.',
+#                           val_mapping={'current': 1, 'power': 2},
+#                           parameter_class=GroupParameter)
+
+        self.add_parameter('enabled',
+                           label='Control loop on/off',
+                           docstring='Specifies whether the control loop is on or off',
+                           val_mapping={True: 1, False: 0},
                            parameter_class=GroupParameter)
 
         self.add_parameter('powerup_enable',
                            label='Power-up enable on/off',
                            docstring='Specifies whether the output remains on '
                                      'or shuts off after power cycle.',
+                           get_parser=int,
                            val_mapping={True: 1, False: 0},
                            parameter_class=GroupParameter)
 
@@ -315,8 +324,8 @@ class Output_340(InstrumentChannel):
                                    self.powerup_enable, self.powerup_enable],
                                   set_cmd=f'CSET {self._loop}, {{input_channel}}, '
                                           f'{{units}}, '
-                                          f'{{powerup_enable}},'
-                                          f'{{current_or_power}}',
+                                          f'{{enabled}}, '
+                                          f'{{powerup_enable}}',
                                   get_cmd=f'CSET? {self._loop}')
 
         # Parameters for Closed Loop PID Parameter Command
