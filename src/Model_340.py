@@ -321,7 +321,7 @@ class Output_340(InstrumentChannel):
                            parameter_class=GroupParameter)
 
         self.output_group = Group([self.input_channel, self.units,
-                                   self.powerup_enable, self.powerup_enable],
+                                   self.enabled, self.powerup_enable],
                                   set_cmd=f'CSET {self._loop}, {{input_channel}}, '
                                           f'{{units}}, '
                                           f'{{enabled}}, '
