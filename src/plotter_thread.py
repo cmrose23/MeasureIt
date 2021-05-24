@@ -8,6 +8,71 @@ import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 
+import pyqtgraph as pg
+class pyqtgraphPlotter(QThread):
+    def __init__(self, sweep, plot_bin=1):
+        self.sweep = sweep
+        self.data_queue = deque([])
+        self.finished = False
+        self.last_pass = False
+        self.figs_set = False
+        self.kill_flag = False
+        self.plot_bin = plot_bin
+
+        self.set_plot = None
+        self.follow_plots = []
+        self.win = pg.GraphicsLayoutWidget(show=False, title='MeasureIt Plotter')
+
+        pg.setConfigOptions(antialias=True)
+
+        QThread.__init__(self)
+
+    def create_figs(self):
+        """
+        Creates default figures for each of the parameters. Plots them in a new, separate window.
+        """
+        if self.figs_set == True:
+            print("figs already set. returning.")
+            return
+
+        # print("creating figures")
+        self.figs_set = True
+
+        # Create the on-screen instructions
+        #text = pg.TextItem('Keyboard Shortcuts')
+        #plot = pg.plot()
+        #plot.addItem(text)
+
+        num_plots = len(self.sweep._params)
+        if self.sweep.set_param is not None:
+            num_plots += 1
+
+        columns = math.ceil(math.sqrt(num_plots))
+        rows = math.ceil(num_plots / columns)
+
+        n=0
+        if self.sweep.set_param is not None:
+            self.set_plot = self.win.addPlot(title=self.sweep.set_param.label)
+            self.set_plot.setLabel('left', self.sweep.set_param.label, units=self.sweep.set_param.unit)
+            self.set_plot.setLabel('bottom', 'time', units='s')
+
+        n += 1
+        self.follow_plots = []
+        for p in self.sweep._params:
+            plot = self.win.addPlot(title=p.label)
+            plot.setLabel('left', p.label, units=p.unit)
+            if self.sweep.set_param is not None:
+                plot.setLabel('bottom', self.sweep.set_param.label, units=self.sweep.set_param.unit)
+            else:
+                plot.setLabel('bottom', 'time', units='s')
+            self.follow_plots.append(plot)
+            n += 1
+            if n == columns:
+                self.win.nextRow()
+                n = 0
+
+
+
 class PlotterThread(QThread):
     """
     Thread to control the plotting of a sweep of class BaseSweep. Gets the data
