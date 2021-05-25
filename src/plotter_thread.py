@@ -1,6 +1,6 @@
 # plotter_thread.py
 
-from PyQt5.QtCore import QThread
+from PyQt5.QtCore import QThread, QObject
 from collections import deque
 import math
 import time
@@ -21,27 +21,71 @@ class pyqtgraphPlotter(QThread):
 
         self.set_plot = None
         self.follow_plots = []
-        self.win = pg.GraphicsLayoutWidget(show=False, title='MeasureIt Plotter')
+        self.view = pg.GraphicsView()
+        self.win = pg.GraphicsLayout()
+        self.view.setCentralItem(self.win)
+        self.view.setWindowTitle('MeasureIt Plots')
 
         pg.setConfigOptions(antialias=True)
 
+        self.set_lines = {'fwd': [], 'bwd': []}
+        self.follow_lines = {}
+
         QThread.__init__(self)
+
+    def __del__(self):
+        """
+        Standard destructor.
+        """
+        self.wait()
+
+    def handle_close(self, evt):
+        self.clear()
+
+    def key_pressed(self, event):
+        key = event.key
+
+        if key == " ":
+            self.sweep.flip_direction()
+        elif key == "escape":
+            self.sweep.stop()
+        elif key == "enter":
+            self.sweep.resume()
+
+    def add_break(self, direction):
+        d = ''
+        if direction == 0:
+            d = 'fwd'
+        else:
+            d = 'bwd'
+        if self.set_plot is not None:
+            x = self.set_lines[d].xData
+            y = self.set_lines[d].yData
+            self.set_lines[d].setData(np.append(x, np.nan), np.append(y, np.nan))
+        for p, lines in self.follow_lines.items():
+            x = lines[d].xData
+            y = lines[d].yData
+            lines[d].setData(np.append(x, np.nan), np.append(y, np.nan))
+
+    def add_data_to_queue(self, data, direction):
+        """
+        Grabs the data to plot.
+
+        Arguments:
+            data - list of tuples to plot
+        """
+        self.data_queue.append((data, direction))
 
     def create_figs(self):
         """
         Creates default figures for each of the parameters. Plots them in a new, separate window.
         """
-        if self.figs_set == True:
+        if self.figs_set is True:
             print("figs already set. returning.")
             return
 
         # print("creating figures")
         self.figs_set = True
-
-        # Create the on-screen instructions
-        #text = pg.TextItem('Keyboard Shortcuts')
-        #plot = pg.plot()
-        #plot.addItem(text)
 
         num_plots = len(self.sweep._params)
         if self.sweep.set_param is not None:
@@ -50,27 +94,126 @@ class pyqtgraphPlotter(QThread):
         columns = math.ceil(math.sqrt(num_plots))
         rows = math.ceil(num_plots / columns)
 
-        n=0
+        # Create the on-screen instructions
+        text = """
+        <h2 style="text-align:center">Keyboard Shortcuts</h2>
+        <h3 style="text-align:center">esc: stop&emsp;enter: resume&emsp;spacebar: flip direction</h3>
+        """
+        self.win.addLabel(text, colspan=columns)
+        self.win.nextRow()
+
+        n = 0
         if self.sweep.set_param is not None:
             self.set_plot = self.win.addPlot(title=self.sweep.set_param.label)
             self.set_plot.setLabel('left', self.sweep.set_param.label, units=self.sweep.set_param.unit)
             self.set_plot.setLabel('bottom', 'time', units='s')
+            self.set_plot.showGrid(x=True, y=True)
+            self.set_plot.enableAutoRange('xy', True)
+            self.set_lines['fwd'] = self.set_plot.plot(pen=(255, 0, 0))
+            self.set_lines['bwd'] = self.set_plot.plot(pen=(0, 0, 255))
+            n += 1
 
-        n += 1
         self.follow_plots = []
         for p in self.sweep._params:
             plot = self.win.addPlot(title=p.label)
             plot.setLabel('left', p.label, units=p.unit)
+            plot.showGrid(x=True, y=True)
+            plot.enableAutoRange('xy', True)
             if self.sweep.set_param is not None:
                 plot.setLabel('bottom', self.sweep.set_param.label, units=self.sweep.set_param.unit)
             else:
                 plot.setLabel('bottom', 'time', units='s')
             self.follow_plots.append(plot)
+            self.follow_lines[p] = {}
+            self.follow_lines[p]['fwd'] = plot.plot(pen=(255, 0, 0))
+            self.follow_lines[p]['bwd'] = plot.plot(pen=(0, 0, 255))
             n += 1
-            if n == columns:
+            if n % columns == 0:
                 self.win.nextRow()
-                n = 0
+        self.view.show()
 
+    def update_plots(self, force=False):
+        # Remove all the data points from the deque
+        updates = 0
+        if (len(self.data_queue) >= self.plot_bin or force is True) and self.figs_set is True:
+            while len(self.data_queue) > 0:
+                temp = self.data_queue.popleft()
+                data = deque(temp[0])
+                direction = ''
+                if temp[1] == 0:
+                    direction = 'fwd'
+                else:
+                    direction = 'bwd'
+                updates += 1
+
+                # Grab the time data
+                time_data = data.popleft()
+
+                # Grab and plot the set_param if we are driving one
+                if self.sweep.set_param is not None:
+                    set_param_data = data.popleft()
+
+                    x = self.set_lines[direction].xData
+                    y = self.set_lines[direction].yData
+                    # Plot as a function of time
+                    self.set_lines[direction].setData(np.append(x, time_data[1]), np.append(y, set_param_data[1]))
+
+                x_data = 0
+                if self.sweep.x_axis == 1:
+                    x_data = time_data[1]
+                elif self.sweep.x_axis == 0:
+                    x_data = set_param_data[1]
+
+                # Now, grab the rest of the following param data
+                for (p, val) in data:
+                    line = self.follow_lines[p][direction]
+                    line.setData(np.append(line.xData, x_data), np.append(line.yData, val))
+
+
+
+    def run(self):
+        """
+        Actual function to run, that controls the plotting of the data.
+        """
+        if self.figs_set is False:
+            self.create_figs()
+
+        # Run while the sweep is running
+        while self.kill_flag is False:
+            t = time.monotonic()
+
+            # Update our plots!
+            self.update_plots()
+
+            # Smart sleep, by checking if the whole process has taken longer than
+            # our sleep time
+            sleep_time = self.sweep.inter_delay / 2 - (time.monotonic() - t)
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+
+            if self.sweep.is_running is False:
+                # If we're done, update our plots one last time to ensure all data is flushed
+                self.update_plots(force=True)
+
+        # if self.kill_flag == True:
+        #    self.clear()
+
+    def reset(self):
+        """
+        Resets all the plots
+        """
+        if self.figs_set is True:
+            if self.set_plot is not None:
+                self.set_lines['fwd'].setData(np.array([]))
+                self.set_lines['bwd'].setData(np.array([]))
+            for p, lines in self.follow_lines.items():
+                lines['fwd'].setData(np.array([]))
+                lines['bwd'].setData(np.array([]))
+
+    def clear(self):
+        self.reset()
+        self.view.close()
+        self.figs_set = False
 
 
 class PlotterThread(QThread):
@@ -205,8 +348,8 @@ class PlotterThread(QThread):
         self.cid = self.fig.canvas.mpl_connect('key_press_event', self.key_pressed)
 
         plt.show(block=False)
-        
-        
+
+
             
     def add_data_to_queue(self, data, direction):
         """

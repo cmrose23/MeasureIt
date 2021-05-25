@@ -5,7 +5,7 @@ from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot
 from qcodes.dataset.measurements import Measurement
 from qcodes import Station
 from src.runner_thread import RunnerThread
-from src.plotter_thread import PlotterThread
+from src.plotter_thread import pyqtgraphPlotter
 from src.util import _autorange_srs
 from qcodes.dataset.data_set import DataSet
 
@@ -211,7 +211,7 @@ class BaseSweep(QObject):
 
         # If we don't have a plotter yet want to plot, create it and the figures
         if self.plotter is None and self.plot_data is True:
-            self.plotter = PlotterThread(self, self.plot_bin)
+            self.plotter = pyqtgraphPlotter(self, self.plot_bin)
             self.plotter.create_figs()
 
         # If we don't have a runner, create it and tell it of the plotter,
