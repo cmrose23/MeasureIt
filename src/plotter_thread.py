@@ -1,16 +1,22 @@
 # plotter_thread.py
 
-from PyQt5.QtCore import QThread, QObject
+from PyQt5 import QtCore, QtGui
+from PyQt5.QtCore import QThread, QObject, pyqtSignal, pyqtSlot
 from collections import deque
 import math
 import time
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
-
 import pyqtgraph as pg
-class pyqtgraphPlotter(QThread):
+import threading
+
+
+class pyqtgraphPlotter(QObject):
+
     def __init__(self, sweep, plot_bin=1):
+        QObject.__init__(self)
+
         self.sweep = sweep
         self.data_queue = deque([])
         self.finished = False
@@ -21,37 +27,33 @@ class pyqtgraphPlotter(QThread):
 
         self.set_plot = None
         self.follow_plots = []
-        self.view = pg.GraphicsView()
-        self.win = pg.GraphicsLayout()
-        self.view.setCentralItem(self.win)
-        self.view.setWindowTitle('MeasureIt Plots')
-
-        pg.setConfigOptions(antialias=True)
+        self.view = None
+        self.win = None
 
         self.set_lines = {'fwd': [], 'bwd': []}
         self.follow_lines = {}
-
-        QThread.__init__(self)
 
     def __del__(self):
         """
         Standard destructor.
         """
-        self.wait()
+        self.clear()
+        #self.wait()
 
     def handle_close(self, evt):
         self.clear()
 
-    def key_pressed(self, event):
-        key = event.key
+    def keyPressEvent(self, event):
+        key = event.key()
 
-        if key == " ":
+        if key == QtCore.Qt.Key_Space:
             self.sweep.flip_direction()
-        elif key == "escape":
+        elif key == QtCore.Qt.Key_Escape:
             self.sweep.stop()
-        elif key == "enter":
+        elif key == QtCore.Qt.Key_Enter:
             self.sweep.resume()
 
+    @pyqtSlot(int)
     def add_break(self, direction):
         d = ''
         if direction == 0:
@@ -61,20 +63,32 @@ class pyqtgraphPlotter(QThread):
         if self.set_plot is not None:
             x = self.set_lines[d].xData
             y = self.set_lines[d].yData
+            if x is None:
+                x = np.array([])
+            if y is None:
+                y = np.array([])
             self.set_lines[d].setData(np.append(x, np.nan), np.append(y, np.nan))
         for p, lines in self.follow_lines.items():
             x = lines[d].xData
             y = lines[d].yData
+            if x is None:
+                x = np.array([])
+            if y is None:
+                y = np.array([])
             lines[d].setData(np.append(x, np.nan), np.append(y, np.nan))
 
+    @pyqtSlot(list, int)
     def add_data_to_queue(self, data, direction):
         """
         Grabs the data to plot.
 
         Arguments:
             data - list of tuples to plot
+            direction - int (0 or 1) determining forward or backward
         """
+        print('add data', threading.get_ident(), QThread.currentThreadId())
         self.data_queue.append((data, direction))
+        self.update_plots(force=False)
 
     def create_figs(self):
         """
@@ -83,10 +97,18 @@ class pyqtgraphPlotter(QThread):
         if self.figs_set is True:
             print("figs already set. returning.")
             return
-
-        # print("creating figures")
+        print('a')
+        self.view = pg.GraphicsView()
+        print('a')
+        self.win = pg.GraphicsLayout()
+        print('a')
+        self.view.setCentralItem(self.win)
+        print('a')
+        self.view.setWindowTitle('MeasureIt Plots')
+        print('test 1')
+        pg.setConfigOptions(antialias=True)
         self.figs_set = True
-
+        print('test 2')
         num_plots = len(self.sweep._params)
         if self.sweep.set_param is not None:
             num_plots += 1
@@ -101,14 +123,14 @@ class pyqtgraphPlotter(QThread):
         """
         self.win.addLabel(text, colspan=columns)
         self.win.nextRow()
-
+        print('test 3')
         n = 0
         if self.sweep.set_param is not None:
             self.set_plot = self.win.addPlot(title=self.sweep.set_param.label)
             self.set_plot.setLabel('left', self.sweep.set_param.label, units=self.sweep.set_param.unit)
             self.set_plot.setLabel('bottom', 'time', units='s')
             self.set_plot.showGrid(x=True, y=True)
-            self.set_plot.enableAutoRange('xy', True)
+            self.set_plot.enableAutoRange()
             self.set_lines['fwd'] = self.set_plot.plot(pen=(255, 0, 0))
             self.set_lines['bwd'] = self.set_plot.plot(pen=(0, 0, 255))
             n += 1
@@ -118,7 +140,7 @@ class pyqtgraphPlotter(QThread):
             plot = self.win.addPlot(title=p.label)
             plot.setLabel('left', p.label, units=p.unit)
             plot.showGrid(x=True, y=True)
-            plot.enableAutoRange('xy', True)
+            plot.enableAutoRange()
             if self.sweep.set_param is not None:
                 plot.setLabel('bottom', self.sweep.set_param.label, units=self.sweep.set_param.unit)
             else:
@@ -149,12 +171,16 @@ class pyqtgraphPlotter(QThread):
                 # Grab the time data
                 time_data = data.popleft()
 
+                print('attempting to update setparam plot', threading.get_ident(), QThread.currentThreadId())
                 # Grab and plot the set_param if we are driving one
                 if self.sweep.set_param is not None:
                     set_param_data = data.popleft()
 
-                    x = self.set_lines[direction].xData
-                    y = self.set_lines[direction].yData
+                    x, y = self.set_lines[direction].getData()
+                    if x is None:
+                        x = np.array([])
+                    if y is None:
+                        y = np.array([])
                     # Plot as a function of time
                     self.set_lines[direction].setData(np.append(x, time_data[1]), np.append(y, set_param_data[1]))
 
@@ -166,34 +192,47 @@ class pyqtgraphPlotter(QThread):
 
                 # Now, grab the rest of the following param data
                 for (p, val) in data:
+                    print(f'attempting to update {p.label} plot {threading.get_ident()}')
                     line = self.follow_lines[p][direction]
-                    line.setData(np.append(line.xData, x_data), np.append(line.yData, val))
+                    x, y = line.getData()
+                    if x is None:
+                        x = np.array([])
+                    if y is None:
+                        y = np.array([])
+                    line.setData(np.append(x, x_data), np.append(y, val))
+                self.win.update()
 
-
-
+    @pyqtSlot()
     def run(self):
         """
         Actual function to run, that controls the plotting of the data.
         """
+        print('plotter b4 figs', threading.get_ident(), QThread.currentThreadId())
+
+#        if __name__ == '__main__':
+#            import sys
+#            if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
+
         if self.figs_set is False:
             self.create_figs()
-
+        print('plotter after figs', threading.get_ident())
+        #QtGui.QApplication.instance().exec_()
         # Run while the sweep is running
-        while self.kill_flag is False:
-            t = time.monotonic()
-
-            # Update our plots!
-            self.update_plots()
+        #while self.kill_flag is False:
+        #    t = time.monotonic()
+        #    print('about to call update plots')
+        #    # Update our plots!
+        #    self.update_plots()
 
             # Smart sleep, by checking if the whole process has taken longer than
             # our sleep time
-            sleep_time = self.sweep.inter_delay / 2 - (time.monotonic() - t)
-            if sleep_time > 0:
-                time.sleep(sleep_time)
+        #    sleep_time = self.sweep.inter_delay / 2 - (time.monotonic() - t)
+        #    if sleep_time > 0:
+        #        time.sleep(sleep_time)
 
-            if self.sweep.is_running is False:
-                # If we're done, update our plots one last time to ensure all data is flushed
-                self.update_plots(force=True)
+        #    if self.sweep.is_running is False:
+        #        # If we're done, update our plots one last time to ensure all data is flushed
+        #        self.update_plots(force=True)
 
         # if self.kill_flag == True:
         #    self.clear()

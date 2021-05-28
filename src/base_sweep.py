@@ -1,12 +1,15 @@
 # base_sweep.py
 import importlib
 import time, json
-from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot
+from PyQt5.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
 from qcodes.dataset.measurements import Measurement
 from qcodes import Station
 from src.runner_thread import RunnerThread
 from src.plotter_thread import pyqtgraphPlotter
 from src.util import _autorange_srs
+import threading
+import pyqtgraph as pg
+from PyQt5 import QtGui
 from qcodes.dataset.data_set import DataSet
 
 
@@ -17,6 +20,7 @@ class BaseSweep(QObject):
     """
     update_signal = pyqtSignal(dict)
     dataset_signal = pyqtSignal(dict)
+    add_plotter_break = pyqtSignal(int)
 
     def __init__(self, set_param=None, inter_delay=0.01, save_data=True, plot_data=True, x_axis_time=1,
                  datasaver=None, parent=None, plot_bin=1):
@@ -50,6 +54,9 @@ class BaseSweep(QObject):
         self.t0 = 0
 
         self.persist_data = None
+        self.runner = None
+        self.plotter = None
+        self.plot_thread = None
         self.datasaver = datasaver
 
         QObject.__init__(self)
@@ -211,8 +218,16 @@ class BaseSweep(QObject):
 
         # If we don't have a plotter yet want to plot, create it and the figures
         if self.plotter is None and self.plot_data is True:
+            print('main', threading.get_ident(), QThread.currentThreadId())
             self.plotter = pyqtgraphPlotter(self, self.plot_bin)
+            app = pg.mkQApp()
+
+            #self.plotter.create_figs()
+            self.plot_thread = QThread()
+            self.plotter.moveToThread(self.plot_thread)
             self.plotter.create_figs()
+            self.plot_thread.started.connect(QtGui.QApplication.instance().exec_)
+            self.add_plotter_break.connect(self.plotter.add_break)
 
         # If we don't have a runner, create it and tell it of the plotter,
         # which is where it will send data to be plotted
@@ -231,11 +246,11 @@ class BaseSweep(QObject):
         self.persist_data = persist_data
 
         # Tells the threads to begin
-        if self.plot_data is True and self.plotter.isRunning() is False:
-            self.plotter.start()
+        if self.plot_data is True and self.plot_thread.isRunning() is False:
+            self.plot_thread.start()
         elif self.plot_data is True and self.plotter.figs_set is False:
             # print("somehow here")
-            self.plotter.create_figs()
+            self.plot_thread.start()
         if not self.runner.isRunning():
             self.runner.kill_flag = False
             self.runner.start()
