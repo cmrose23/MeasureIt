@@ -10,6 +10,21 @@ import matplotlib
 import matplotlib.pyplot as plt
 import pyqtgraph as pg
 import threading
+from pyqtgraph.graphicsItems.GraphicsLayout import GraphicsLayout
+
+class myGraphics(GraphicsLayout):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def keyPressEvent(self, event):
+        key = event.key()
+
+        if key == QtCore.Qt.Key_Space:
+            self.sweep.flip_direction()
+        elif key == QtCore.Qt.Key_Escape:
+            self.sweep.stop()
+        elif key == QtCore.Qt.Key_Enter:
+            self.sweep.resume()
 
 
 class pyqtgraphPlotter(QObject):
@@ -42,16 +57,6 @@ class pyqtgraphPlotter(QObject):
 
     def handle_close(self, evt):
         self.clear()
-
-    def keyPressEvent(self, event):
-        key = event.key()
-
-        if key == QtCore.Qt.Key_Space:
-            self.sweep.flip_direction()
-        elif key == QtCore.Qt.Key_Escape:
-            self.sweep.stop()
-        elif key == QtCore.Qt.Key_Enter:
-            self.sweep.resume()
 
     @pyqtSlot(int)
     def add_break(self, direction):
@@ -100,7 +105,7 @@ class pyqtgraphPlotter(QObject):
         print('a')
         self.view = pg.GraphicsView()
         print('a')
-        self.win = pg.GraphicsLayout()
+        self.win = myGraphics()
         print('a')
         self.view.setCentralItem(self.win)
         print('a')
