@@ -129,7 +129,8 @@ class Sweep1D(BaseSweep):
             return self.step_IPS120()
 
         # If we aren't at the end, keep going
-        if abs(self.setpoint - self.end) >= abs(self.step / 2):
+        # Check if we are within half a step of the end, plus a little wiggle room for rounding errors
+        if abs(self.setpoint - self.end) - abs(self.step/2) > abs(self.step)*1e-5:
             self.setpoint = self.setpoint + self.step
             self.set_param.set(self.setpoint)
             return [(self.set_param, self.setpoint)]
