@@ -1,3 +1,4 @@
 call conda.bat activate qcodes
-C:\Users\nanouser\Anaconda3\envs\qcodes\python.exe C:\Users\nanouser\MeasureIt\GUI\GUI_Measureit.py
+%USERPROFILE%\Anaconda3\envs\qcodes\python.exe %USERPROFILE%\MeasureIt\GUI\GUI_Measureit.py
+timeout /t -1
 call conda deactivate
